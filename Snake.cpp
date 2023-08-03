@@ -3,6 +3,9 @@
 #include <array>
 #include <string>
 #include <random>
+#include <chrono>
+#include <thread>
+#include <mutex>
 
 
 const std::tuple<int, int> up{
@@ -20,6 +23,9 @@ const std::tuple<int, int> left{
 const std::tuple<int, int> right{
     std::make_tuple(0, 1)
 };
+
+const int MATRIX_HEIGHT = 10;
+const int MATRIX_WIDTH = 20;
 
 class Snake
 {
@@ -62,7 +68,7 @@ class Snake
             moveToPos = oldPos;
 
             if (head == body[i]) {
-                eatsTail = true;
+                eatsTail = true;    
             }
         }
     }
@@ -91,10 +97,12 @@ class Snake
 class Apple
 {
     std::tuple<int, int> currentPosition;
+    std::mt19937 gen;
 
     public:
         Apple(std::tuple<int, int>& initialPosition)
-            : currentPosition(initialPosition)
+            : currentPosition(initialPosition),
+              gen(std::random_device()())
         {
         }
 
@@ -114,9 +122,6 @@ class Apple
         }
 
         int getRandomNumber(int minNumber, int maxNumber) {
-            std::random_device rd;
-            std::mt19937 gen(rd());
-
             std::uniform_int_distribution<int> distribution(minNumber, maxNumber);
 
             return distribution(gen);
@@ -314,33 +319,62 @@ class Game
     }
 };
 
+std::mutex inputMutex;
+std::string userInput;
+
+void handleInput() {
+    while (true) {
+        std::string input;
+        std::getline(std::cin, input);
+
+        std::lock_guard<std::mutex> lock(inputMutex);
+        userInput = input;
+    }
+}
+
 int main()
 {
     std::vector<std::tuple<int, int>> initialSnakeBody = { std::make_tuple(2, 4), std::make_tuple(2, 3), std::make_tuple(2, 2) };
     std::tuple<int, int> initialSnakeDirection = right;
     std::tuple<int, int> initialApplePos = std::make_tuple(5, 5);
 
-    Game game(10, 20, initialSnakeBody, initialSnakeDirection, initialApplePos);
-    game.render();
+    Game game(MATRIX_HEIGHT, MATRIX_WIDTH, initialSnakeBody, initialSnakeDirection, initialApplePos);
 
-    std::string input;
-    while (true) {
-        std::getline(std::cin, input);
+    std::thread inputThread(handleInput);
 
-        if (input.empty()) {
-            input = 'e';
+    while (!game.isGameOver()) {
+        std::lock_guard<std::mutex> lock(inputMutex);
+        std::string input = userInput;
+
+        if (!input.empty()) {
+            char inputChar = input[0];
+
+            switch (inputChar) {
+            case 'w':
+                game.moveSnake("w");
+                break;
+            case 'a':
+                game.moveSnake("a");
+                break;
+            case 's':
+                game.moveSnake("s");
+                break;
+            case 'd':
+                game.moveSnake("d");
+                break;
+            }
         }
-        else if (input[0] == 'q') {
-            break;
+        else {
+            game.moveSnake("");
         }
 
-        game.moveSnake(input);
         game.render();
-
-        if (game.isGameOver() == true) {
-
-            std::cout << "Game over";
-            break;
-        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
     }
+
+    inputThread.join();
+
+    std::cout << "Game over" << std::endl;
+
+    return 0;
 }
